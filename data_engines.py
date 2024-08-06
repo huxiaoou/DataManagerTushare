@@ -49,6 +49,7 @@ class CDataEngineTushareFutDailyMd(__CDataEngineTushare):
     def download_daily_data(self, trade_date: str) -> pd.DataFrame:
         while True:
             try:
+                time.sleep(0.5)
                 df = self.api.fut_daily(trade_date=trade_date, fields=self.fields)
                 return df
             except TimeoutError as e:
