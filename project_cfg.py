@@ -10,7 +10,8 @@ class CProCfg:
 
 
 futures_md = CSaveDataInfo(
-    file_format="tushare_futures_md_{}.csv.gz",
+    db_name="tushare_futures_by_date.h5",
+    table_name_format="Y{}/M{}/D{}/md",
     desc="futures daily market data",
     fields=(
         "ts_code", "trade_date",
@@ -21,6 +22,6 @@ futures_md = CSaveDataInfo(
 
 pro_cfg = CProCfg(
     calendar_path=r"E:\Deploy\Data\Calendar\cne_calendar.csv",
-    daily_data_root_dir=r"D:\OneDrive\Data\tushare\by_date",
+    daily_data_root_dir=r"D:\OneDrive\Data\tushare",
     futures_md=futures_md,
 )
