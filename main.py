@@ -5,7 +5,7 @@ def parse_args():
     arg_parser = argparse.ArgumentParser(description="Project to download data from tushare")
     arg_parser.add_argument(
         "--switch", type=str, required=True,
-        choices=("fmd", "contract", "universe", "position"),
+        choices=("fmd", "contract", "universe", "position", "basis"),
     )
     arg_parser.add_argument("--bgn", type=str, required=True)
     arg_parser.add_argument("--stp", type=str, default=None)
@@ -69,6 +69,19 @@ if __name__ == "__main__":
             save_root_dir=pro_cfg.daily_data_root_dir,
             save_data_info=pro_cfg.futures_pos,
             exchanges=pro_cfg.futures_exchanges,
+        )
+        engine.download_data_range(
+            bgn_date=args.bgn,
+            stp_date=args.stp or calendar.get_next_date(args.bgn),
+            calendar=calendar,
+        )
+    elif args.switch == "basis":
+        from data_engines import CDataEngineWindFutDailyBasis
+
+        engine = CDataEngineWindFutDailyBasis(
+            save_root_dir=pro_cfg.daily_data_root_dir,
+            save_data_info=pro_cfg.futures_basis,
+            unvrs_data_info=pro_cfg.futures_universe,
         )
         engine.download_data_range(
             bgn_date=args.bgn,

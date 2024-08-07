@@ -1,8 +1,10 @@
 import os
+import sys
 import time
 import tushare as ts
 import pandas as pd
 import re
+from WindPy import w as wapi
 from loguru import logger
 from husfort.qutility import check_and_makedirs, qtimer
 from husfort.qcalendar import CCalendar
@@ -107,7 +109,7 @@ class CDataEngineTushareFutDailyUnvrs(__CDataEngine):
         cntrcts_path = os.path.join(cntrcts_dir, cntrcts_file)
         cntrcts = pd.read_csv(cntrcts_path)["contract"]
         universe_ts = list(set(map(self.to_instrument, cntrcts)) - self.exceptions)
-        universe_wd = [self.to_wind_code(z) for z in universe_ts]
+        universe_wd = [self.to_wind_code(_) for _ in universe_ts]
         df = pd.DataFrame({
             "ts_code": universe_ts,
             "wd_code": universe_wd,
@@ -136,6 +138,81 @@ class CDataEngineTushareFutDailyPos(__CDataEngineTushare):
                         dfs.append(exchange_data)
                 df = pd.concat(dfs, axis=0, ignore_index=True)
                 return df
+            except TimeoutError as e:
+                logger.error(e)
+                time.sleep(5)
+
+
+class __CDataEngineWind(__CDataEngine):
+    def __init__(self, save_root_dir: str, save_file_format: str, data_desc: str, unvrs_data_info: CSaveDataInfo):
+        self.api = wapi
+        self.api.start()
+        self.unvrs_data_info = unvrs_data_info
+        super().__init__(save_root_dir, save_file_format, data_desc)
+
+    @staticmethod
+    def convert_data_to_dataframe(downloaded_data, download_values: list[str], col_names: list[str]) -> pd.DataFrame:
+        if downloaded_data.ErrorCode != 0:
+            logger.error(
+                f"When download data from WIND, ErrorCode = {downloaded_data.ErrorCode}."
+                f"Program will terminate at once, please check again"
+            )
+            sys.exit()
+        else:
+            df = pd.DataFrame(downloaded_data.Data, index=download_values, columns=col_names).T
+            return df
+
+    def load_universe(self, trade_date: str) -> pd.DataFrame:
+        unvrs_file = self.unvrs_data_info.file_format.format(trade_date)
+        unvrs_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
+        unvrs_path = os.path.join(unvrs_dir, unvrs_file)
+        unvrs_data = pd.read_csv(unvrs_path)
+        return unvrs_data
+
+
+class CDataEngineWindFutDailyBasis(__CDataEngineWind):
+    def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, unvrs_data_info: CSaveDataInfo):
+        super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc, unvrs_data_info)
+
+    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+        while True:
+            try:
+                time.sleep(0.5)
+                universe = self.load_universe(trade_date)
+                universe["isInCFE"] = universe["wd_code"].map(lambda _: _.split(".")[1] == "CFE")
+                unvrs_f = universe.loc[universe["isInCFE"], "wd_code"].tolist()
+                unvrs_c = universe.loc[~universe["isInCFE"], "wd_code"].tolist()
+
+                # download financial
+                indicators = {
+                    "anal_basis_stkidx": "basis",
+                    "anal_basisannualyield_stkidx": "basis_annual",
+                    "anal_basispercent_stkidx": "basis_rate",
+                }
+                f_data = self.api.wss(codes=unvrs_f, fields=list(indicators), options=f"tradeDate={trade_date}")
+                df_f = self.convert_data_to_dataframe(f_data, download_values=list(indicators), col_names=unvrs_f)
+                df_f = df_f.rename(mapper=indicators, axis=1)
+
+                # download commodity
+                indicators = {
+                    "anal_basis": "basis",
+                    "basisannualyield": "basis_annual",
+                    "anal_basispercent2": "basis_rate",
+                }
+                c_data = self.api.wss(codes=unvrs_c, fields=list(indicators), options=f"tradeDate={trade_date}")
+                df_c = self.convert_data_to_dataframe(c_data, download_values=list(indicators), col_names=unvrs_c)
+                df_c = df_c.rename(mapper=indicators, axis=1)
+
+                # concat
+                df = pd.concat([df_f, df_c], axis=0, ignore_index=False)
+                res = pd.merge(
+                    left=universe[["ts_code", "wd_code"]],
+                    right=df,
+                    left_on="wd_code",
+                    right_index=True,
+                    how="left",
+                )
+                return res
             except TimeoutError as e:
                 logger.error(e)
                 time.sleep(5)
