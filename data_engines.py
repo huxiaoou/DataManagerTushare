@@ -19,9 +19,8 @@ class CSaveDataInfo:
     fields: tuple[str, ...]
 
 
-class __CDataEngineTushare:
+class __CDataEngine:
     def __init__(self, save_root_dir: str, save_file_format: str, data_desc: str):
-        self.api = ts.pro_api()
         self.save_root_dir = save_root_dir
         self.save_file_format = save_file_format
         self.data_desc = data_desc
@@ -45,6 +44,12 @@ class __CDataEngineTushare:
         return 0
 
 
+class __CDataEngineTushare(__CDataEngine):
+    def __init__(self, save_root_dir: str, save_file_format: str, data_desc: str):
+        self.api = ts.pro_api()
+        super().__init__(save_root_dir, save_file_format, data_desc)
+
+
 class CDataEngineTushareFutDailyMd(__CDataEngineTushare):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo):
         self.fields = ",".join(save_data_info.fields)
@@ -61,29 +66,53 @@ class CDataEngineTushareFutDailyMd(__CDataEngineTushare):
                 time.sleep(5)
 
 
-class CDataEngineTushareFutDailyCntrcts(__CDataEngineTushare):
+class CDataEngineTushareFutDailyCntrcts(__CDataEngine):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, md_data_info: CSaveDataInfo):
-        self.fields = ",".join(save_data_info.fields)
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
         self.md_data_info = md_data_info
 
     @staticmethod
     def is_contract(symbol: str) -> bool:
+        # try to match "CH2409.SHF"
         return re.match(pattern=r"^[A-Z]+[0-9]{4}\.[A-Z]{3}", string=symbol) is not None
 
     def download_daily_data(self, trade_date: str) -> pd.DataFrame:
-        while True:
-            try:
-                md_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
-                md_file = self.md_data_info.file_format.format(trade_date)
-                md_path = os.path.join(md_dir, md_file)
-                md = pd.read_csv(md_path)
-                contracts = filter(self.is_contract, md["ts_code"])
-                df = pd.DataFrame({"contract": contracts})
-                return df
-            except TimeoutError as e:
-                logger.error(e)
-                time.sleep(5)
+        md_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
+        md_file = self.md_data_info.file_format.format(trade_date)
+        md_path = os.path.join(md_dir, md_file)
+        md = pd.read_csv(md_path)
+        contracts = filter(self.is_contract, md["ts_code"])
+        df = pd.DataFrame({"contract": contracts})
+        return df
+
+
+class CDataEngineTushareFutDailyUnvrs(__CDataEngine):
+    def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, cntrcts_data_info: CSaveDataInfo,
+                 exceptions: set[str]):
+        super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
+        self.cntrcts_data_info = cntrcts_data_info
+        self.exceptions: set[str] = exceptions
+
+    @staticmethod
+    def to_instrument(symbol: str) -> str:
+        return re.sub(pattern="[0-9]", repl="", string=symbol)
+
+    @staticmethod
+    def to_wind_code(symbol: str) -> str:
+        return symbol.replace(".ZCE", ".CZC").replace(".CFX", ".CFE")
+
+    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+        cntrcts_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
+        cntrcts_file = self.cntrcts_data_info.file_format.format(trade_date)
+        cntrcts_path = os.path.join(cntrcts_dir, cntrcts_file)
+        cntrcts = pd.read_csv(cntrcts_path)["contract"]
+        universe_ts = list(set(map(self.to_instrument, cntrcts)) - self.exceptions)
+        universe_wd = [self.to_wind_code(z) for z in universe_ts]
+        df = pd.DataFrame({
+            "ts_code": universe_ts,
+            "wd_code": universe_wd,
+        }).sort_values("ts_code")
+        return df
 
 
 class CDataEngineTushareFutDailyPos(__CDataEngineTushare):

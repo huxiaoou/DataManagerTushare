@@ -6,9 +6,11 @@ from data_engines import CSaveDataInfo
 class CProCfg:
     calendar_path: str
     daily_data_root_dir: str
+    futures_exchanges: list[str]
     futures_md: CSaveDataInfo
     futures_contracts: CSaveDataInfo
-    futures_exchanges: list[str]
+    futures_universe: CSaveDataInfo
+    futures_pos: CSaveDataInfo
 
 
 futures_md = CSaveDataInfo(
@@ -27,6 +29,12 @@ futures_contracts = CSaveDataInfo(
     fields=("contract",),
 )
 
+futures_universe = CSaveDataInfo(
+    file_format="tushare_futures_universe_{}.csv.gz",
+    desc="futures daily universe",
+    fields=("ts_code", "wd_code"),
+)
+
 futures_pos = CSaveDataInfo(
     file_format="tushare_futures_pos_{}.csv.gz",
     desc="futures daily holding positions",
@@ -42,5 +50,7 @@ pro_cfg = CProCfg(
     daily_data_root_dir=r"D:\OneDrive\Data\tushare\by_date",
     futures_exchanges=["SHFE", "INE", "DCE", "CZCE", "GFEX", "CFFEX"],
     futures_md=futures_md,
-    futures_contracts=futures_contracts
+    futures_contracts=futures_contracts,
+    futures_universe=futures_universe,
+    futures_pos=futures_pos,
 )
