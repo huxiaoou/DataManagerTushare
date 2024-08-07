@@ -4,7 +4,7 @@ import tushare as ts
 import pandas as pd
 import re
 from loguru import logger
-from husfort.qutility import check_and_makedirs
+from husfort.qutility import check_and_makedirs, qtimer
 from husfort.qcalendar import CCalendar
 from dataclasses import dataclass
 from rich.progress import track
@@ -29,6 +29,7 @@ class __CDataEngineTushare:
     def download_daily_data(self, trade_date: str) -> pd.DataFrame:
         raise NotImplementedError
 
+    @qtimer
     def download_data_range(self, bgn_date: str, stp_date: str, calendar: CCalendar):
         iter_dates = calendar.get_iter_list(bgn_date, stp_date)
         for trade_date in track(iter_dates, description=f"Downloading {self.data_desc}"):
