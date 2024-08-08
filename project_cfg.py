@@ -49,7 +49,7 @@ futures_pos = CSaveDataInfo(
 futures_basis = CSaveDataInfo(
     file_format="wind_futures_basis_{}.csv.gz",
     desc="futures daily fundamental data",
-    fields=("ts_code", "wd_code", "basis", "basis_annual", "basis_rate"),
+    fields=("ts_code", "wd_code", "basis", "basis_rate", "basis_annual"),
 )
 
 pro_cfg = CProCfg(

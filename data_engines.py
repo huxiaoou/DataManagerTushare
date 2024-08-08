@@ -153,10 +153,8 @@ class __CDataEngineWind(__CDataEngine):
     @staticmethod
     def convert_data_to_dataframe(downloaded_data, download_values: list[str], col_names: list[str]) -> pd.DataFrame:
         if downloaded_data.ErrorCode != 0:
-            logger.error(
-                f"When download data from WIND, ErrorCode = {downloaded_data.ErrorCode}."
-                f"Program will terminate at once, please check again"
-            )
+            logger.error(f"When download data from WIND, ErrorCode = {downloaded_data.ErrorCode}.")
+            logger.info("Program will terminate at once, please check again.")
             sys.exit()
         else:
             df = pd.DataFrame(downloaded_data.Data, index=download_values, columns=col_names).T
@@ -186,8 +184,8 @@ class CDataEngineWindFutDailyBasis(__CDataEngineWind):
                 # download financial
                 indicators = {
                     "anal_basis_stkidx": "basis",
-                    "anal_basisannualyield_stkidx": "basis_annual",
                     "anal_basispercent_stkidx": "basis_rate",
+                    "anal_basisannualyield_stkidx": "basis_annual",
                 }
                 f_data = self.api.wss(codes=unvrs_f, fields=list(indicators), options=f"tradeDate={trade_date}")
                 df_f = self.convert_data_to_dataframe(f_data, download_values=list(indicators), col_names=unvrs_f)
@@ -196,8 +194,8 @@ class CDataEngineWindFutDailyBasis(__CDataEngineWind):
                 # download commodity
                 indicators = {
                     "anal_basis": "basis",
-                    "basisannualyield": "basis_annual",
                     "anal_basispercent2": "basis_rate",
+                    "basisannualyield": "basis_annual",
                 }
                 c_data = self.api.wss(codes=unvrs_c, fields=list(indicators), options=f"tradeDate={trade_date}")
                 df_c = self.convert_data_to_dataframe(c_data, download_values=list(indicators), col_names=unvrs_c)
