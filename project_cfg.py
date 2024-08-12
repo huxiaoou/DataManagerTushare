@@ -1,11 +1,18 @@
+import dataclasses
+import yaml
 from dataclasses import dataclass
 from data_engines import CSaveDataInfo
+from husfort.qsqlite import CDbStruct, CSqlTable
 
+
+# ---------- project configuration ----------
 
 @dataclass(frozen=True)
 class CProCfg:
     calendar_path: str
+    root_dir: str
     daily_data_root_dir: str
+    db_struct_path: str
     futures_exchanges: list[str]
     futures_md: CSaveDataInfo
     futures_contracts: CSaveDataInfo
@@ -54,11 +61,31 @@ futures_basis = CSaveDataInfo(
 
 pro_cfg = CProCfg(
     calendar_path=r"E:\Deploy\Data\Calendar\cne_calendar.csv",
+    root_dir=r"D:\OneDrive\Data\tushare",
     daily_data_root_dir=r"D:\OneDrive\Data\tushare\by_date",
+    db_struct_path=r"D:\OneDrive\Data\tushare\db_struct.yaml",
     futures_exchanges=["SHFE", "INE", "DCE", "CZCE", "GFEX", "CFFEX"],
     futures_md=futures_md,
     futures_contracts=futures_contracts,
     futures_universe=futures_universe,
     futures_pos=futures_pos,
     futures_basis=futures_basis,
+)
+
+# ---------- databases structure ----------
+with open(pro_cfg.db_struct_path, "r") as f:
+    db_struct = yaml.safe_load(f)
+
+
+@dataclasses.dataclass(frozen=True)
+class CDbStructCfg:
+    fmd: CDbStruct
+
+
+db_struct_cfg = CDbStructCfg(
+    fmd=CDbStruct(
+        db_save_dir=pro_cfg.root_dir,
+        db_name=db_struct["fmd"]["db_name"],
+        table=CSqlTable(cfg=db_struct["fmd"]["table"]),
+    )
 )

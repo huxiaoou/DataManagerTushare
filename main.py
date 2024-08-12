@@ -91,4 +91,20 @@ if __name__ == "__main__":
         else:
             raise ValueError(f"switch = {args.switch} is illegal")
     elif args.func == "update":
-        print("sub parser = 'update'")
+        if args.switch == "fmd":
+            from databases import CDbWriterFmd
+            from project_cfg import pro_cfg, db_struct_cfg
+
+            sqldb_writer = CDbWriterFmd(
+                db_struct=db_struct_cfg.fmd,
+                raw_data_root_dir=pro_cfg.daily_data_root_dir,
+                raw_data_info=pro_cfg.futures_md,
+                cntrcts_data_info=pro_cfg.futures_contracts,
+            )
+            sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
+        elif args.switch == "position":
+            pass
+        elif args.switch == "basis":
+            pass
+        else:
+            raise ValueError(f"switch = {args.switch} is illegal")
