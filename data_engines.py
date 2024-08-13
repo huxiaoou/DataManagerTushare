@@ -76,7 +76,7 @@ class CDataEngineTushareFutDailyCntrcts(__CDataEngine):
     @staticmethod
     def is_contract(symbol: str) -> bool:
         # try to match "CH2409.SHF"
-        return re.match(pattern=r"^[A-Z]+[0-9]{4}\.[A-Z]{3}", string=symbol) is not None
+        return re.match(pattern=r"^[A-Z]{1,2}[\d]{4}\.[A-Z]{3}$", string=symbol) is not None
 
     def download_daily_data(self, trade_date: str) -> pd.DataFrame:
         md_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
