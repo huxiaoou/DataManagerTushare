@@ -80,6 +80,7 @@ with open(pro_cfg.db_struct_path, "r") as f:
 @dataclasses.dataclass(frozen=True)
 class CDbStructCfg:
     fmd: CDbStruct
+    position: CDbStruct
 
 
 db_struct_cfg = CDbStructCfg(
@@ -87,5 +88,10 @@ db_struct_cfg = CDbStructCfg(
         db_save_dir=pro_cfg.root_dir,
         db_name=db_struct["fmd"]["db_name"],
         table=CSqlTable(cfg=db_struct["fmd"]["table"]),
+    ),
+    position=CDbStruct(
+        db_save_dir=pro_cfg.root_dir,
+        db_name=db_struct["position"]["db_name"],
+        table=CSqlTable(cfg=db_struct["position"]["table"]),
     )
 )

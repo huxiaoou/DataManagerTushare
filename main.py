@@ -103,7 +103,15 @@ if __name__ == "__main__":
             )
             sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
         elif args.switch == "position":
-            pass
+            from databases import CDbWriterPos
+            from project_cfg import pro_cfg, db_struct_cfg
+
+            sqldb_writer = CDbWriterPos(
+                db_struct=db_struct_cfg.position,
+                raw_data_root_dir=pro_cfg.daily_data_root_dir,
+                raw_data_info=pro_cfg.futures_pos,
+            )
+            sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
         elif args.switch == "basis":
             pass
         else:

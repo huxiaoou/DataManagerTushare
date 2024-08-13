@@ -1,7 +1,8 @@
 import os
+import re
 import pandas as pd
 from rich.progress import track
-from husfort.qutility import qtimer
+from husfort.qutility import qtimer, SFY
 from husfort.qinstruments import CInstrumentInfoTable
 from husfort.qcalendar import CCalendar
 from husfort.qsqlite import CDbStruct, CMgrSqlDb
@@ -69,5 +70,57 @@ class CDbWriterFmd(__CDbWriter):
         cntrcts_data = self.load_cntrcts(trade_date)
         raw_data = pd.merge(left=cntrcts_data, right=raw_data, left_on="contract", right_on="ts_code", how="left")
         raw_data["instrument"] = raw_data["ts_code"].map(CInstrumentInfoTable.parse_instrument_from_contract)
+        rft_data = raw_data[self.db_struct.table.vars.names]
+        return rft_data
+
+
+class CDbWriterPos(__CDbWriter):
+    @staticmethod
+    def drop_rows(raw_data: pd.DataFrame) -> pd.DataFrame:
+        filter_rows = raw_data["symbol"].map(lambda _: not _.endswith("ACTV"))
+        return raw_data[filter_rows].copy()
+
+    @staticmethod
+    def rft_broker(broker: str) -> str:
+        return broker.replace("（代客）", "").replace("(代客)", "")
+
+    @staticmethod
+    def rft_symbol(symbol: str) -> str:
+        x = re.sub(pattern=r"[^a-zA-Z0-9\.]", repl="", string=symbol)
+        if x == "PTA":
+            return "TA"
+        else:
+            return x
+
+    @staticmethod
+    def rft_exchange(exchange: str) -> str:
+        return {
+            "SHFE": "SHF",
+            "INE": "INE",
+            "DCE": "DCE",
+            "CZCE": "ZCE",
+            "GFEX": "GFE",
+            "CFFEX": "CFX",
+        }[exchange]
+
+    @staticmethod
+    def parse_code_type(code: str, trade_date: str) -> int:
+        if re.match(pattern=r"^[A-Z]{1,2}[\d]{4}\.[A-Z]{3}$", string=code) is not None:
+            # format "XX0000.YYY" or "X0000.YYY"
+            return 0
+        elif re.match(pattern=r"^[A-Z]{1,2}\.[A-Z]{3}$", string=code) is not None:
+            # format "XX.YYY" or "X.YYY"
+            return 1
+        else:
+            raise ValueError(f"Pattern can not be parsed for code = {SFY(code)} @ {SFY(trade_date)}")
+
+    def reformat(self, raw_data: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+        raw_data = self.drop_rows(raw_data)
+        raw_data["broker"] = raw_data["broker"].map(self.rft_broker)
+        raw_data["symbol"] = raw_data["symbol"].map(self.rft_symbol)
+        raw_data["exchange"] = raw_data["exchange"].map(self.rft_exchange)
+        raw_data["ts_code"] = raw_data[["symbol", "exchange"]].apply(lambda z: f"{z['symbol']}.{z['exchange']}", axis=1)
+        raw_data["instrument"] = raw_data["ts_code"].map(CInstrumentInfoTable.parse_instrument_from_contract)
+        raw_data["code_type"] = raw_data["ts_code"].map(lambda _: self.parse_code_type(_, trade_date))
         rft_data = raw_data[self.db_struct.table.vars.names]
         return rft_data
