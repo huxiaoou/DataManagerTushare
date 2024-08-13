@@ -6,7 +6,7 @@ import pandas as pd
 import re
 from WindPy import w as wapi
 from loguru import logger
-from husfort.qutility import check_and_makedirs, qtimer
+from husfort.qutility import check_and_makedirs, qtimer, SFG
 from husfort.qcalendar import CCalendar
 from dataclasses import dataclass
 from rich.progress import track
@@ -33,7 +33,7 @@ class __CDataEngine:
     @qtimer
     def download_data_range(self, bgn_date: str, stp_date: str, calendar: CCalendar):
         iter_dates = calendar.get_iter_list(bgn_date, stp_date)
-        for trade_date in track(iter_dates, description=f"Downloading {self.data_desc}"):
+        for trade_date in track(iter_dates, description=f"Downloading {SFG(self.data_desc)}"):
             # for trade_date in iter_dates:
             check_and_makedirs(save_dir := os.path.join(self.save_root_dir, trade_date[0:4], trade_date))
             save_file = self.save_file_format.format(trade_date)
