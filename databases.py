@@ -2,7 +2,7 @@ import os
 import re
 import pandas as pd
 from rich.progress import track
-from husfort.qutility import qtimer, SFY
+from husfort.qutility import qtimer, SFY, SFG
 from husfort.qinstruments import CInstrumentInfoTable
 from husfort.qcalendar import CCalendar
 from husfort.qsqlite import CDbStruct, CMgrSqlDb
@@ -41,7 +41,7 @@ class __CDbWriter:
     def main(self, bgn_date: str, stp_date: str, calendar: CCalendar):
         iter_dates = calendar.get_iter_list(bgn_date, stp_date)
         new_data_list: list[pd.DataFrame] = []
-        for trade_date in track(iter_dates, description=f"Processing {self.raw_data_info.desc} to sql"):
+        for trade_date in track(iter_dates, description=f"Processing {SFG(self.raw_data_info.desc)} to sql"):
             raw_data = self.load_data(trade_date)
             rft_data = self.reformat(raw_data, trade_date)
             new_data_list.append(rft_data)
