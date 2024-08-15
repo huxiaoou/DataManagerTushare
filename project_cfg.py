@@ -1,4 +1,3 @@
-import dataclasses
 import yaml
 from dataclasses import dataclass
 from data_engines import CSaveDataInfo
@@ -60,7 +59,7 @@ futures_basis = CSaveDataInfo(
 )
 
 pro_cfg = CProCfg(
-    calendar_path=r"E:\Deploy\Data\Calendar\cne_calendar.csv",
+    calendar_path=r"D:\OneDrive\Data\Calendar\cne_calendar.csv",
     root_dir=r"D:\OneDrive\Data\tushare",
     daily_data_root_dir=r"D:\OneDrive\Data\tushare\by_date",
     db_struct_path=r"D:\OneDrive\Data\tushare\db_struct.yaml",
@@ -77,7 +76,7 @@ with open(pro_cfg.db_struct_path, "r") as f:
     db_struct = yaml.safe_load(f)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class CDbStructCfg:
     fmd: CDbStruct
     position: CDbStruct
