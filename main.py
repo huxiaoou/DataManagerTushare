@@ -23,7 +23,7 @@ def parse_args():
     arg_parser_sub = arg_parser_subs.add_parser(name="update", help="Update data for database")
     arg_parser_sub.add_argument(
         "--switch", type=str, required=True,
-        choices=("fmd", "position", "basis"),
+        choices=("fmd", "position", "basis", "stock"),
     )
 
     # --- parse args
@@ -122,6 +122,24 @@ if __name__ == "__main__":
             )
             sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
         elif args.switch == "basis":
-            pass
+            from databases import CDbWriterBasis
+            from project_cfg import pro_cfg, db_struct_cfg
+
+            sqldb_writer = CDbWriterBasis(
+                db_struct=db_struct_cfg.basis,
+                raw_data_root_dir=pro_cfg.daily_data_root_dir,
+                raw_data_info=pro_cfg.futures_basis,
+            )
+            sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
+        elif args.switch == "stock":
+            from databases import CDbWriterStock
+            from project_cfg import pro_cfg, db_struct_cfg
+
+            sqldb_writer = CDbWriterStock(
+                db_struct=db_struct_cfg.stock,
+                raw_data_root_dir=pro_cfg.daily_data_root_dir,
+                raw_data_info=pro_cfg.futures_stock,
+            )
+            sqldb_writer.main(bgn_date=bgn, stp_date=stp, calendar=calendar)
         else:
             raise ValueError(f"switch = {args.switch} is illegal")

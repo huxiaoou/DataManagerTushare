@@ -61,7 +61,7 @@ futures_basis = CSaveDataInfo(
 
 futures_stock = CSaveDataInfo(
     file_format="wind_futures_stock_{}.csv.gz",
-    desc="futures daily basis",
+    desc="futures daily stock",
     fields=("ts_code", "wd_code", "stock"),
 )
 
@@ -88,6 +88,8 @@ with open(pro_cfg.db_struct_path, "r") as f:
 class CDbStructCfg:
     fmd: CDbStruct
     position: CDbStruct
+    basis: CDbStruct
+    stock: CDbStruct
 
 
 db_struct_cfg = CDbStructCfg(
@@ -100,5 +102,15 @@ db_struct_cfg = CDbStructCfg(
         db_save_dir=pro_cfg.root_dir,
         db_name=db_struct["position"]["db_name"],
         table=CSqlTable(cfg=db_struct["position"]["table"]),
-    )
+    ),
+    basis=CDbStruct(
+        db_save_dir=pro_cfg.root_dir,
+        db_name=db_struct["basis"]["db_name"],
+        table=CSqlTable(cfg=db_struct["basis"]["table"]),
+    ),
+    stock=CDbStruct(
+        db_save_dir=pro_cfg.root_dir,
+        db_name=db_struct["stock"]["db_name"],
+        table=CSqlTable(cfg=db_struct["stock"]["table"]),
+    ),
 )

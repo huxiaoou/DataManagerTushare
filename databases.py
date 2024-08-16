@@ -124,3 +124,17 @@ class CDbWriterPos(__CDbWriter):
         raw_data["code_type"] = raw_data["ts_code"].map(lambda _: self.parse_code_type(_, trade_date))
         rft_data = raw_data[self.db_struct.table.vars.names]
         return rft_data
+
+
+class CDbWriterBasis(__CDbWriter):
+    def reformat(self, raw_data: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+        raw_data["trade_date"] = trade_date
+        rft_data = raw_data[self.db_struct.table.vars.names]
+        return rft_data
+
+
+class CDbWriterStock(__CDbWriter):
+    def reformat(self, raw_data: pd.DataFrame, trade_date: str) -> pd.DataFrame:
+        raw_data["trade_date"] = trade_date
+        rft_data = raw_data[self.db_struct.table.vars.names]
+        return rft_data
