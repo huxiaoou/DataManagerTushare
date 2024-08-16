@@ -18,6 +18,7 @@ class CProCfg:
     futures_universe: CSaveDataInfo
     futures_pos: CSaveDataInfo
     futures_basis: CSaveDataInfo
+    futures_stock: CSaveDataInfo
 
 
 futures_md = CSaveDataInfo(
@@ -58,6 +59,12 @@ futures_basis = CSaveDataInfo(
     fields=("ts_code", "wd_code", "basis", "basis_rate", "basis_annual"),
 )
 
+futures_stock = CSaveDataInfo(
+    file_format="wind_futures_stock_{}.csv.gz",
+    desc="futures daily basis",
+    fields=("ts_code", "wd_code", "stock"),
+)
+
 pro_cfg = CProCfg(
     calendar_path=r"D:\OneDrive\Data\Calendar\cne_calendar.csv",
     root_dir=r"D:\OneDrive\Data\tushare",
@@ -69,6 +76,7 @@ pro_cfg = CProCfg(
     futures_universe=futures_universe,
     futures_pos=futures_pos,
     futures_basis=futures_basis,
+    futures_stock=futures_stock,
 )
 
 # ---------- databases structure ----------

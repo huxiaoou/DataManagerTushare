@@ -214,3 +214,30 @@ class CDataEngineWindFutDailyBasis(__CDataEngineWind):
             except TimeoutError as e:
                 logger.error(e)
                 time.sleep(5)
+
+
+class CDataEngineWindFutDailyStock(__CDataEngineWind):
+    def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, unvrs_data_info: CSaveDataInfo):
+        super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc, unvrs_data_info)
+
+    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+        while True:
+            try:
+                time.sleep(0.5)
+                universe = self.load_universe(trade_date)
+                unvrs = universe["wd_code"].tolist()
+                indicators = {"st_stock": "stock"}
+                stock_data = self.api.wss(codes=unvrs, fields=list(indicators), options=f"tradeDate={trade_date}")
+                df = self.convert_data_to_dataframe(stock_data, download_values=list(indicators), col_names=unvrs)
+                df = df.rename(mapper=indicators, axis=1)
+                res = pd.merge(
+                    left=universe[["ts_code", "wd_code"]],
+                    right=df,
+                    left_on="wd_code",
+                    right_index=True,
+                    how="left",
+                )
+                return res
+            except TimeoutError as e:
+                logger.error(e)
+                time.sleep(5)
