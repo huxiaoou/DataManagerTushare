@@ -66,10 +66,10 @@ futures_stock = CSaveDataInfo(
 )
 
 pro_cfg = CProCfg(
-    calendar_path=r"D:\OneDrive\Data\Calendar\cne_calendar.csv",
-    root_dir=r"D:\OneDrive\Data\tushare",
-    daily_data_root_dir=r"D:\OneDrive\Data\tushare\by_date",
-    db_struct_path=r"D:\OneDrive\Data\tushare\db_struct.yaml",
+    calendar_path=r"E:\OneDrive\Data\Calendar\cne_calendar.csv",
+    root_dir=r"E:\OneDrive\Data\tushare",
+    daily_data_root_dir=r"E:\OneDrive\Data\tushare\by_date",
+    db_struct_path=r"E:\OneDrive\Data\tushare\db_struct.yaml",
     futures_exchanges=["SHFE", "INE", "DCE", "CZCE", "GFEX", "CFFEX"],
     futures_md=futures_md,
     futures_contracts=futures_contracts,
