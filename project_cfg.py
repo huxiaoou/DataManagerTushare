@@ -19,6 +19,7 @@ class CProCfg:
     futures_pos: CSaveDataInfo
     futures_basis: CSaveDataInfo
     futures_stock: CSaveDataInfo
+    futures_minute_bar: CSaveDataInfo
 
 
 futures_md = CSaveDataInfo(
@@ -65,6 +66,15 @@ futures_stock = CSaveDataInfo(
     fields=("ts_code", "wd_code", "stock"),
 )
 
+futures_minute_bar = CSaveDataInfo(
+    file_format="tushare_futures_minute_bar_{}.csv.gz",
+    desc="futures daily minute bar",
+    fields=(
+        "ts_code", "trade_time",
+        "open", "high", "low", "close",
+        "vol", "amount", "oi"),
+)
+
 pro_cfg = CProCfg(
     calendar_path=r"E:\OneDrive\Data\Calendar\cne_calendar.csv",
     root_dir=r"E:\OneDrive\Data\tushare",
@@ -77,6 +87,7 @@ pro_cfg = CProCfg(
     futures_pos=futures_pos,
     futures_basis=futures_basis,
     futures_stock=futures_stock,
+    futures_minute_bar=futures_minute_bar,
 )
 
 # ---------- databases structure ----------
@@ -90,6 +101,7 @@ class CDbStructCfg:
     position: CDbStruct
     basis: CDbStruct
     stock: CDbStruct
+    fMinuteBar: CDbStruct
 
 
 db_struct_cfg = CDbStructCfg(
@@ -113,4 +125,9 @@ db_struct_cfg = CDbStructCfg(
         db_name=db_struct["stock"]["db_name"],
         table=CSqlTable(cfg=db_struct["stock"]["table"]),
     ),
+    fMinuteBar=CDbStruct(
+        db_save_dir=pro_cfg.root_dir,
+        db_name=db_struct["fMinuteBar"]["db_name"],
+        table=CSqlTable(cfg=db_struct["fMinuteBar"]["table"])
+    )
 )

@@ -117,6 +117,100 @@ class CDataEngineTushareFutDailyUnvrs(__CDataEngine):
         return df
 
 
+class CDataEngineTushareFutDailyMinuteBar(__CDataEngineTushare):
+    def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo,
+                 md_data_info: CSaveDataInfo, cntrcts_data_info: CSaveDataInfo,
+                 calendar: CCalendar, top: int = 3,
+                 ):
+        """
+
+        :param save_root_dir:
+        :param save_data_info:
+        :param md_data_info:
+        :param cntrcts_data_info: make sure contracts data for trade date has been created
+        :param top: how many contracts of each instrument will be downloaded for minute data
+        """
+        self.md_data_info = md_data_info
+        self.cntrcts_data_info = cntrcts_data_info
+        self.fields = ",".join(save_data_info.fields)
+        self.calendar = calendar
+        self.top = top
+        super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
+
+    def load_md(self, trade_date) -> pd.DataFrame:
+        md_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
+        md_file = self.md_data_info.file_format.format(trade_date)
+        md_path = os.path.join(md_dir, md_file)
+        md = pd.read_csv(md_path)
+        return md
+
+    @staticmethod
+    def reformat_md(md: pd.DataFrame) -> pd.DataFrame:
+        md = md.rename(columns={"ts_code": "contract"})
+        md["vol"] = md["vol"].fillna(0)
+        md = md[["contract", "vol"]]
+        return md
+
+    def load_cntrcts(self, trade_date) -> pd.DataFrame:
+        cntrcts_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
+        cntrcts_file = self.cntrcts_data_info.file_format.format(trade_date)
+        cntrcts_path = os.path.join(cntrcts_dir, cntrcts_file)
+        cntrcts = pd.read_csv(cntrcts_path)
+        return cntrcts
+
+    @staticmethod
+    def add_instrument(data: pd.DataFrame, contract_name: str = "contract") -> None:
+        data["instrument"] = data[contract_name].map(lambda _: re.sub(pattern=r"\d", repl="", string=_))
+
+    def find_top_cntrcts(self, md_cntrcts: pd.DataFrame) -> dict[str, list[str]]:
+        top_cntrcts_for_instru: dict[str, list[str]] = {}  # type:ignore
+        for instru, instru_data in md_cntrcts.groupby(by="instrument"):
+            top_cntrcts_for_instru[instru] = instru_data.head(self.top)["contract"].tolist()  # type:ignore
+        return top_cntrcts_for_instru
+
+    def download_minute_bar(self, contract: str, this_trade_date: str, prev_trade_date: str) -> pd.DataFrame:
+        while True:
+            try:
+                time.sleep(0.1)
+                # _bts = f"{prev_trade_date[0:4]}-{prev_trade_date[4:6]}-{prev_trade_date[6:8]} 19:00:00"
+                # _ets = f"{this_trade_date[0:4]}-{this_trade_date[4:6]}-{this_trade_date[6:8]} 16:00:00"
+                # df = self.api.ft_mins(
+                #     ts_code=contract,
+                #     freq="1min",
+                #     start_date=_bts,
+                #     end_date=_ets,
+                #     fields=self.fields
+                # )
+                # df = df.sort_values(by="trade_time")
+                # return df
+                """
+                    Tushare requires more authority to access the minute data
+                    We are too poor to afford this.
+                    Fuck it.
+                """
+                raise NotImplementedError
+
+            except TimeoutError as e:
+                logger.error(e)
+                time.sleep(5)
+
+    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+        prev_trade_date = self.calendar.get_next_date(trade_date, shift=-1)
+        md = self.reformat_md(self.load_md(trade_date))
+        cntrcts = self.load_cntrcts(trade_date)
+        md_cntrcts = pd.merge(left=cntrcts, right=md, on="contract", how="left")
+        self.add_instrument(md_cntrcts)
+        md_cntrcts = md_cntrcts.sort_values(by=["instrument", "vol", "contract"], ascending=[True, False, True])
+        top_cntrcts_for_instru = self.find_top_cntrcts(md_cntrcts)
+        dfs: list[pd.DataFrame] = []
+        for instru, contracts in top_cntrcts_for_instru.items():
+            for contract in contracts:
+                df = self.download_minute_bar(contract, this_trade_date=trade_date, prev_trade_date=prev_trade_date)
+                dfs.append(df)
+        minute_bar_data = pd.concat(dfs, axis=0, ignore_index=True)
+        return minute_bar_data
+
+
 class CDataEngineTushareFutDailyPos(__CDataEngineTushare):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, exchanges: list[str]):
         self.fields = ",".join(save_data_info.fields)

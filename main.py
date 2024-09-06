@@ -16,7 +16,7 @@ def parse_args():
     arg_parser_sub = arg_parser_subs.add_parser(name="download", help="Download data from tushare and wind")
     arg_parser_sub.add_argument(
         "--switch", type=str, required=True,
-        choices=("fmd", "contract", "universe", "position", "basis", "stock"),
+        choices=("fmd", "contract", "universe", "minute", "position", "basis", "stock"),
     )
 
     # func: update
@@ -68,6 +68,17 @@ if __name__ == "__main__":
                 save_data_info=pro_cfg.futures_universe,
                 cntrcts_data_info=pro_cfg.futures_contracts,
                 exceptions={"SCTAS.INE"},
+            )
+            engine.download_data_range(bgn_date=bgn, stp_date=stp, calendar=calendar)
+        elif args.switch == "minute":
+            from data_engines import CDataEngineTushareFutDailyMinuteBar
+
+            engine = CDataEngineTushareFutDailyMinuteBar(
+                save_root_dir=pro_cfg.daily_data_root_dir,
+                save_data_info=pro_cfg.futures_minute_bar,
+                md_data_info=pro_cfg.futures_md,
+                cntrcts_data_info=pro_cfg.futures_contracts,
+                calendar=calendar,
             )
             engine.download_data_range(bgn_date=bgn, stp_date=stp, calendar=calendar)
         elif args.switch == "position":
