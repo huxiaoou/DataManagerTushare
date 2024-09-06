@@ -12,6 +12,7 @@ class CProCfg:
     root_dir: str
     daily_data_root_dir: str
     db_struct_path: str
+    tick_data_root_dir: str
     futures_exchanges: list[str]
     futures_md: CSaveDataInfo
     futures_contracts: CSaveDataInfo
@@ -80,6 +81,7 @@ pro_cfg = CProCfg(
     root_dir=r"E:\OneDrive\Data\tushare",
     daily_data_root_dir=r"E:\OneDrive\Data\tushare\by_date",
     db_struct_path=r"E:\OneDrive\Data\tushare\db_struct.yaml",
+    tick_data_root_dir=r"E:\OneDrive\Data\juejindata",
     futures_exchanges=["SHFE", "INE", "DCE", "CZCE", "GFEX", "CFFEX"],
     futures_md=futures_md,
     futures_contracts=futures_contracts,

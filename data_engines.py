@@ -1,12 +1,14 @@
 import os
 import sys
 import time
+import datetime as dt
 import tushare as ts
 import pandas as pd
 import re
+import zipfile
 from WindPy import w as wapi
 from loguru import logger
-from husfort.qutility import check_and_makedirs, qtimer, SFG
+from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR
 from husfort.qcalendar import CCalendar
 from dataclasses import dataclass
 from rich.progress import track
@@ -117,10 +119,10 @@ class CDataEngineTushareFutDailyUnvrs(__CDataEngine):
         return df
 
 
-class CDataEngineTushareFutDailyMinuteBar(__CDataEngineTushare):
+class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo,
                  md_data_info: CSaveDataInfo, cntrcts_data_info: CSaveDataInfo,
-                 calendar: CCalendar, top: int = 3,
+                 tick_data_root_dir: str, calendar: CCalendar, top: int = 3,
                  ):
         """
 
@@ -128,11 +130,15 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngineTushare):
         :param save_data_info:
         :param md_data_info:
         :param cntrcts_data_info: make sure contracts data for trade date has been created
+        :param tick_data_root_dir: like 'E:\\OneDrive\\Data\\juejindata'
+        :param calendar:
         :param top: how many contracts of each instrument will be downloaded for minute data
         """
+
         self.md_data_info = md_data_info
         self.cntrcts_data_info = cntrcts_data_info
         self.fields = ",".join(save_data_info.fields)
+        self.tick_data_root_dir = tick_data_root_dir
         self.calendar = calendar
         self.top = top
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
@@ -168,34 +174,38 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngineTushare):
             top_cntrcts_for_instru[instru] = instru_data.head(self.top)["contract"].tolist()  # type:ignore
         return top_cntrcts_for_instru
 
-    def download_minute_bar(self, contract: str, this_trade_date: str, prev_trade_date: str) -> pd.DataFrame:
-        while True:
-            try:
-                time.sleep(0.1)
-                # _bts = f"{prev_trade_date[0:4]}-{prev_trade_date[4:6]}-{prev_trade_date[6:8]} 19:00:00"
-                # _ets = f"{this_trade_date[0:4]}-{this_trade_date[4:6]}-{this_trade_date[6:8]} 16:00:00"
-                # df = self.api.ft_mins(
-                #     ts_code=contract,
-                #     freq="1min",
-                #     start_date=_bts,
-                #     end_date=_ets,
-                #     fields=self.fields
-                # )
-                # df = df.sort_values(by="trade_time")
-                # return df
-                """
-                    Tushare requires more authority to access the minute data
-                    We are too poor to afford this.
-                    Fuck it.
-                """
-                raise NotImplementedError
+    @staticmethod
+    def reformat_contract(contract: str) -> tuple[str, str]:
+        new_contract, exchange = contract.split(".")
+        if exchange == "ZCE":
+            return new_contract[:-4] + new_contract[-3:], exchange
+        elif exchange == "CFX":
+            return new_contract, exchange
+        elif exchange in ["DCE", "SHF", "INE", "GFE"]:
+            return new_contract.lower(), exchange
 
-            except TimeoutError as e:
-                logger.error(e)
-                time.sleep(5)
+    def load_contract_file_from_zipfile(self, new_contract: str, trade_date: str) -> pd.DataFrame:
+        zip_path = os.path.join(self.tick_data_root_dir, trade_date[0:4], f"{trade_date[0:6]}.zip")
+        with zipfile.ZipFile(zip_path, mode="r") as zf:
+            files = zf.namelist()
+            target_file = f"{trade_date[0:6]}/{trade_date}/{new_contract}_{trade_date}.csv"
+            if target_file in files:
+                sf = zf.open(target_file)
+                tick_data = pd.read_csv(sf)
+                return tick_data
+            else:
+                raise ValueError(f"{SFR(target_file)} is not found.")
+
+    def generate_minute_bar(self, contract: str, trade_date: str) -> pd.DataFrame:
+        new_contract, exchange = self.reformat_contract(contract)
+        tick_data = self.load_contract_file_from_zipfile(new_contract, trade_date)
+        tick_parser = CTickDataParser(trade_date, exchange=exchange, calendar=self.calendar)
+        tick_parser.add_trade_date(tick_data)
+        tick_parser.add_ticks(tick_data)
+        bar_data = tick_parser.agg_tick_data_to_bar(tick_data)
+        return bar_data
 
     def download_daily_data(self, trade_date: str) -> pd.DataFrame:
-        prev_trade_date = self.calendar.get_next_date(trade_date, shift=-1)
         md = self.reformat_md(self.load_md(trade_date))
         cntrcts = self.load_cntrcts(trade_date)
         md_cntrcts = pd.merge(left=cntrcts, right=md, on="contract", how="left")
@@ -205,7 +215,7 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngineTushare):
         dfs: list[pd.DataFrame] = []
         for instru, contracts in top_cntrcts_for_instru.items():
             for contract in contracts:
-                df = self.download_minute_bar(contract, this_trade_date=trade_date, prev_trade_date=prev_trade_date)
+                df = self.generate_minute_bar(contract, trade_date=trade_date)
                 dfs.append(df)
         minute_bar_data = pd.concat(dfs, axis=0, ignore_index=True)
         return minute_bar_data
@@ -335,3 +345,101 @@ class CDataEngineWindFutDailyStock(__CDataEngineWind):
             except TimeoutError as e:
                 logger.error(e)
                 time.sleep(5)
+
+
+# --- tick data aggregate ---
+class CTickDataParser:
+    def __init__(self, trade_date: str, exchange: str, calendar: CCalendar):
+        self.this_trade_date = trade_date
+        self.prev_trade_date = calendar.get_next_date(self.this_trade_date, shift=-1)
+        self.t_date = dt.datetime.strptime(self.this_trade_date, "%Y%m%d")
+        self.p_date = dt.datetime.strptime(self.prev_trade_date, "%Y%m%d")
+        self.l_date = self.p_date + dt.timedelta(days=1)
+        self.tail_trade_date = self.l_date.strftime("%Y%m%d")
+
+    def parse_date_from_time(self, t_time: str):
+        if t_time <= "04:00:00":
+            return self.tail_trade_date
+        elif t_time <= "16:00:00":
+            return self.this_trade_date
+        else:
+            return self.prev_trade_date
+
+    def add_trade_date(self, tick_data: pd.DataFrame) -> None:
+        tick_data["trade_date"] = tick_data["UpdateTime"].map(lambda _: self.parse_date_from_time)
+
+    @staticmethod
+    def add_ticks(tick_data: pd.DataFrame) -> None:
+        tick_data["ts"] = tick_data[["trade_date", "UpdateTime", "UpdateMillisec"]].apply(
+            lambda z: f"{z['trade_date']} {z['UpdateTime']}.{z['UpdateMillisec']:03d}", axis=1)
+        tick_data["ts"] = pd.to_datetime(tick_data["ts"])
+        tick_data.set_index(keys="ts", inplace=True)
+
+    @staticmethod
+    def __revise_to_end(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: pd.Series) -> bool:
+        if db <= timestamp <= de:
+            s[i] = de
+            return True
+        return False
+
+    @staticmethod
+    def __revise_to_bgn(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: pd.Series) -> bool:
+        if db <= timestamp <= de:
+            s[i] = db
+            return True
+        return False
+
+    def revise(self, tick_data: pd.DataFrame) -> None:
+        # night
+        d0b = self.p_date + dt.timedelta(hours=20, minutes=59)
+        d0e = self.p_date + dt.timedelta(hours=21, minutes=0)
+
+        # morning
+        d1b = self.t_date + dt.timedelta(hours=8, minutes=59)
+        d1e = self.t_date + dt.timedelta(hours=9, minutes=0)
+
+        d2b = self.t_date + dt.timedelta(hours=10, minutes=15)
+        d2e = self.t_date + dt.timedelta(hours=10, minutes=16)
+
+        # middle
+        d3b = self.t_date + dt.timedelta(hours=10, minutes=29)
+        d3e = self.t_date + dt.timedelta(hours=10, minutes=30)
+
+        d4b = self.t_date + dt.timedelta(hours=11, minutes=30)
+        d4e = self.t_date + dt.timedelta(hours=11, minutes=31)
+
+        # afternoon
+        d5b = self.t_date + dt.timedelta(hours=13, minutes=29)
+        d5e = self.t_date + dt.timedelta(hours=13, minutes=30)
+
+        d6b = self.t_date + dt.timedelta(hours=15, minutes=00)
+        d6e = self.t_date + dt.timedelta(hours=15, minutes=1)
+
+        for i, timestamp in enumerate(tick_data["ts"]):
+            if self.__revise_to_end(d0b, d0e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_end(d1b, d1e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_bgn(d2b, d2e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_end(d3b, d3e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_bgn(d4b, d4e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_end(d5b, d5e, i, timestamp, tick_data["ts"]):
+                continue
+            if self.__revise_to_bgn(d6b, d6e, i, timestamp, tick_data["ts"]):
+                continue
+
+    @staticmethod
+    def agg_tick_data_to_bar(tick_data: pd.DataFrame) -> pd.DataFrame:
+        tick_data["Volume"] = tick_data["Volume"].diff().fillna(0)
+        tick_data["Turnover"] = tick_data["Turnover"].diff().fillna(0)
+        ohlc_data = tick_data["LastPrice"].resample("T").ohlc()
+        vol_data = tick_data[["Volume", "Turnover", "OpenInterest"]].resample("T").aggregate({
+            "Volume": sum,
+            "Turnover": sum,
+            "OpenInterest": "last",
+        })
+        bar_data = pd.merge(left=ohlc_data, right=vol_data, left_index=True, right_index=True, how="inner")
+        return bar_data

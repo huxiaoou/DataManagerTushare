@@ -78,6 +78,7 @@ if __name__ == "__main__":
                 save_data_info=pro_cfg.futures_minute_bar,
                 md_data_info=pro_cfg.futures_md,
                 cntrcts_data_info=pro_cfg.futures_contracts,
+                tick_data_root_dir=pro_cfg.tick_data_root_dir,
                 calendar=calendar,
             )
             engine.download_data_range(bgn_date=bgn, stp_date=stp, calendar=calendar)
