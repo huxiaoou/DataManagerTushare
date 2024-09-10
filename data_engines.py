@@ -227,7 +227,7 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
         for instru, contracts in top_cntrcts_for_instru.items():
             for contract in contracts:
                 iter_args.append((instru, contract))
-        pb.update(task_id, total=len(iter_args), description=f"Processing data for {SFG(trade_date)}")
+        pb.update(task_id, total=len(iter_args), description=f"Processing data for {SFG(trade_date)}", completed=0)
         dfs: list[pd.DataFrame] = []
         for instru, contract in iter_args:
             pb.update(task_id, description=f"Processing data for {SFG(trade_date)}/{SFG(instru)}")
