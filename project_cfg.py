@@ -71,7 +71,7 @@ futures_minute_bar = CSaveDataInfo(
     file_format="tushare_futures_minute_bar_{}.csv.gz",
     desc="futures daily minute bar",
     fields=(
-        "ts_code", "trade_time",
+        "ts_code", "trade_date", "timestamp",
         "open", "high", "low", "close",
         "vol", "amount", "oi"),
 )

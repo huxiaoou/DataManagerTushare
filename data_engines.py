@@ -1,17 +1,17 @@
 import os
 import sys
+import re
 import time
 import datetime as dt
 import tushare as ts
 import pandas as pd
-import re
 import zipfile
-from WindPy import w as wapi
 from loguru import logger
+from dataclasses import dataclass
+from rich.progress import Progress, TaskID
+from WindPy import w as wapi
 from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR
 from husfort.qcalendar import CCalendar
-from dataclasses import dataclass
-from rich.progress import track
 
 pd.set_option('display.unicode.east_asian_width', True)
 
@@ -29,22 +29,26 @@ class __CDataEngine:
         self.save_file_format = save_file_format
         self.data_desc = data_desc
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         raise NotImplementedError
 
     @qtimer
     def download_data_range(self, bgn_date: str, stp_date: str, calendar: CCalendar):
         iter_dates = calendar.get_iter_list(bgn_date, stp_date)
-        for trade_date in track(iter_dates, description=f"Downloading {SFG(self.data_desc)}"):
-            # for trade_date in iter_dates:
-            check_and_makedirs(save_dir := os.path.join(self.save_root_dir, trade_date[0:4], trade_date))
-            save_file = self.save_file_format.format(trade_date)
-            save_path = os.path.join(save_dir, save_file)
-            if os.path.exists(save_path):
-                logger.info(f"{self.data_desc} for {trade_date} exists, program will skip it")
-            else:
-                trade_date_data = self.download_daily_data(trade_date)
-                trade_date_data.to_csv(save_path, index=False)
+        with Progress() as pb:
+            task_pri = pb.add_task(description="Pri-task description to be updated", total=len(iter_dates))
+            task_sub = pb.add_task(description="Sub-task description to be updated")
+            for trade_date in iter_dates:
+                pb.update(task_id=task_pri, description=f"Processing data for {SFG(trade_date)}")
+                check_and_makedirs(save_dir := os.path.join(self.save_root_dir, trade_date[0:4], trade_date))
+                save_file = self.save_file_format.format(trade_date)
+                save_path = os.path.join(save_dir, save_file)
+                if os.path.exists(save_path):
+                    logger.info(f"{self.data_desc} for {trade_date} exists, program will skip it")
+                else:
+                    trade_date_data = self.download_daily_data(trade_date, task_id=task_sub, pb=pb)
+                    trade_date_data.to_csv(save_path, index=False)
+                pb.update(task_id=task_pri, advance=1)
         return 0
 
 
@@ -59,7 +63,7 @@ class CDataEngineTushareFutDailyMd(__CDataEngineTushare):
         self.fields = ",".join(save_data_info.fields)
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         while True:
             try:
                 time.sleep(0.5)
@@ -80,7 +84,7 @@ class CDataEngineTushareFutDailyCntrcts(__CDataEngine):
         # try to match "CH2409.SHF"
         return re.match(pattern=r"^[A-Z]{1,2}[\d]{4}\.[A-Z]{3}$", string=symbol) is not None
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         md_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
         md_file = self.md_data_info.file_format.format(trade_date)
         md_path = os.path.join(md_dir, md_file)
@@ -105,7 +109,7 @@ class CDataEngineTushareFutDailyUnvrs(__CDataEngine):
     def to_wind_code(symbol: str) -> str:
         return symbol.replace(".ZCE", ".CZC").replace(".CFX", ".CFE")
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         cntrcts_dir = os.path.join(self.save_root_dir, trade_date[0:4], trade_date)
         cntrcts_file = self.cntrcts_data_info.file_format.format(trade_date)
         cntrcts_path = os.path.join(cntrcts_dir, cntrcts_file)
@@ -176,13 +180,13 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
 
     @staticmethod
     def reformat_contract(contract: str) -> tuple[str, str]:
-        new_contract, exchange = contract.split(".")
+        contract_ctp, exchange = contract.split(".")
         if exchange == "ZCE":
-            return new_contract[:-4] + new_contract[-3:], exchange
+            return contract_ctp[:-4] + contract_ctp[-3:], exchange
         elif exchange == "CFX":
-            return new_contract, exchange
+            return contract_ctp, exchange
         elif exchange in ["DCE", "SHF", "INE", "GFE"]:
-            return new_contract.lower(), exchange
+            return contract_ctp.lower(), exchange
 
     def load_contract_file_from_zipfile(self, new_contract: str, trade_date: str) -> pd.DataFrame:
         zip_path = os.path.join(self.tick_data_root_dir, trade_date[0:4], f"{trade_date[0:6]}.zip")
@@ -196,27 +200,40 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
             else:
                 raise ValueError(f"{SFR(target_file)} is not found.")
 
-    def generate_minute_bar(self, contract: str, trade_date: str) -> pd.DataFrame:
-        new_contract, exchange = self.reformat_contract(contract)
-        tick_data = self.load_contract_file_from_zipfile(new_contract, trade_date)
-        tick_parser = CTickDataParser(trade_date, exchange=exchange, calendar=self.calendar)
-        tick_parser.add_trade_date(tick_data)
-        tick_parser.add_ticks(tick_data)
-        bar_data = tick_parser.agg_tick_data_to_bar(tick_data)
-        return bar_data
+    @staticmethod
+    def cal_vol_and_to(tick_data: pd.DataFrame) -> None:
+        tick_data["Volume"] = tick_data["Volume"] - tick_data["Volume"].shift(1).fillna(0)
+        tick_data["Turnover"] = tick_data["Turnover"] - tick_data["Turnover"].shift(1).fillna(0)
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def generate_minute_bar(self, instru: str, contract: str, trade_date: str) -> pd.DataFrame:
+        contract_ctp, exchange = self.reformat_contract(contract)
+        tick_data = self.load_contract_file_from_zipfile(contract_ctp, trade_date)
+        self.cal_vol_and_to(tick_data)
+        tick_parser = CTickDataParser(
+            trade_date, contract=contract, instru=instru, exchange=exchange,
+            save_vars=self.fields.split(","), calendar=self.calendar,
+        )
+        rft_data = tick_parser.main(tick_data=tick_data)
+        return rft_data
+
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         md = self.reformat_md(self.load_md(trade_date))
         cntrcts = self.load_cntrcts(trade_date)
         md_cntrcts = pd.merge(left=cntrcts, right=md, on="contract", how="left")
         self.add_instrument(md_cntrcts)
         md_cntrcts = md_cntrcts.sort_values(by=["instrument", "vol", "contract"], ascending=[True, False, True])
         top_cntrcts_for_instru = self.find_top_cntrcts(md_cntrcts)
-        dfs: list[pd.DataFrame] = []
+        iter_args: list[tuple[str, str]] = []
         for instru, contracts in top_cntrcts_for_instru.items():
             for contract in contracts:
-                df = self.generate_minute_bar(contract, trade_date=trade_date)
-                dfs.append(df)
+                iter_args.append((instru, contract))
+        pb.update(task_id, total=len(iter_args), description=f"Processing data for {SFG(trade_date)}")
+        dfs: list[pd.DataFrame] = []
+        for instru, contract in iter_args:
+            pb.update(task_id, description=f"Processing data for {SFG(trade_date)}/{SFG(instru)}")
+            df = self.generate_minute_bar(instru=instru, contract=contract, trade_date=trade_date)
+            dfs.append(df)
+            pb.update(task_id, advance=1)
         minute_bar_data = pd.concat(dfs, axis=0, ignore_index=True)
         return minute_bar_data
 
@@ -227,7 +244,7 @@ class CDataEngineTushareFutDailyPos(__CDataEngineTushare):
         self.exchanges = exchanges
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc)
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         while True:
             try:
                 dfs: list[pd.DataFrame] = []
@@ -276,7 +293,7 @@ class CDataEngineWindFutDailyBasis(__CDataEngineWind):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, unvrs_data_info: CSaveDataInfo):
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc, unvrs_data_info)
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         while True:
             try:
                 time.sleep(0.5)
@@ -324,7 +341,7 @@ class CDataEngineWindFutDailyStock(__CDataEngineWind):
     def __init__(self, save_root_dir: str, save_data_info: CSaveDataInfo, unvrs_data_info: CSaveDataInfo):
         super().__init__(save_root_dir, save_data_info.file_format, save_data_info.desc, unvrs_data_info)
 
-    def download_daily_data(self, trade_date: str) -> pd.DataFrame:
+    def download_daily_data(self, trade_date: str, task_id: TaskID, pb: Progress) -> pd.DataFrame:
         while True:
             try:
                 time.sleep(0.5)
@@ -349,7 +366,15 @@ class CDataEngineWindFutDailyStock(__CDataEngineWind):
 
 # --- tick data aggregate ---
 class CTickDataParser:
-    def __init__(self, trade_date: str, exchange: str, calendar: CCalendar):
+    EQT_TRADE_TIME_CHG_DATE = "20160101"
+
+    def __init__(
+            self, trade_date: str, contract: str, instru: str, exchange: str,
+            save_vars: list[str], calendar: CCalendar,
+    ):
+        self.contract = contract
+        self.instru, self.exchange = instru, exchange
+        self.save_vars = save_vars
         self.this_trade_date = trade_date
         self.prev_trade_date = calendar.get_next_date(self.this_trade_date, shift=-1)
         self.t_date = dt.datetime.strptime(self.this_trade_date, "%Y%m%d")
@@ -357,7 +382,7 @@ class CTickDataParser:
         self.l_date = self.p_date + dt.timedelta(days=1)
         self.tail_trade_date = self.l_date.strftime("%Y%m%d")
 
-    def parse_date_from_time(self, t_time: str):
+    def __parse_date_from_time(self, t_time: str):
         if t_time <= "04:00:00":
             return self.tail_trade_date
         elif t_time <= "16:00:00":
@@ -366,36 +391,37 @@ class CTickDataParser:
             return self.prev_trade_date
 
     def add_trade_date(self, tick_data: pd.DataFrame) -> None:
-        tick_data["trade_date"] = tick_data["UpdateTime"].map(lambda _: self.parse_date_from_time)
+        tick_data["trade_date"] = tick_data["UpdateTime"].map(self.__parse_date_from_time)
 
     @staticmethod
     def add_ticks(tick_data: pd.DataFrame) -> None:
         tick_data["ts"] = tick_data[["trade_date", "UpdateTime", "UpdateMillisec"]].apply(
             lambda z: f"{z['trade_date']} {z['UpdateTime']}.{z['UpdateMillisec']:03d}", axis=1)
+        # tick_data["ts"] = tick_data["ts"].map(lambda _: dt.datetime.strptime(_, "%Y%m%d %H:%M:%S.%f"))
         tick_data["ts"] = pd.to_datetime(tick_data["ts"])
         tick_data.set_index(keys="ts", inplace=True)
 
     @staticmethod
-    def __revise_to_end(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: pd.Series) -> bool:
+    def __revise_to_end(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: list[dt.datetime]) -> bool:
         if db <= timestamp <= de:
             s[i] = de
             return True
         return False
 
     @staticmethod
-    def __revise_to_bgn(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: pd.Series) -> bool:
+    def __revise_to_bgn(db: dt.datetime, de: dt.datetime, i: int, timestamp: dt.datetime, s: list[dt.datetime]) -> bool:
         if db <= timestamp <= de:
-            s[i] = db
+            s[i] = db - dt.timedelta(milliseconds=1)
             return True
         return False
 
-    def revise(self, tick_data: pd.DataFrame) -> None:
+    def __revise_non_cfx(self, tick_data: pd.DataFrame) -> pd.DataFrame:
         # night
-        d0b = self.p_date + dt.timedelta(hours=20, minutes=59)
+        d0b = self.p_date + dt.timedelta(hours=20, minutes=55)
         d0e = self.p_date + dt.timedelta(hours=21, minutes=0)
 
         # morning
-        d1b = self.t_date + dt.timedelta(hours=8, minutes=59)
+        d1b = self.t_date + dt.timedelta(hours=8, minutes=55)
         d1e = self.t_date + dt.timedelta(hours=9, minutes=0)
 
         d2b = self.t_date + dt.timedelta(hours=10, minutes=15)
@@ -412,34 +438,128 @@ class CTickDataParser:
         d5b = self.t_date + dt.timedelta(hours=13, minutes=29)
         d5e = self.t_date + dt.timedelta(hours=13, minutes=30)
 
-        d6b = self.t_date + dt.timedelta(hours=15, minutes=00)
-        d6e = self.t_date + dt.timedelta(hours=15, minutes=1)
+        d6b = self.t_date + dt.timedelta(hours=15, minutes=0)
+        d6e = self.t_date + dt.timedelta(hours=15, minutes=5)
 
-        for i, timestamp in enumerate(tick_data["ts"]):
-            if self.__revise_to_end(d0b, d0e, i, timestamp, tick_data["ts"]):
+        ts_lst = tick_data.index.tolist()
+        for i, timestamp in enumerate(ts_lst):
+            if self.__revise_to_end(d0b, d0e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d1b, d1e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_end(d1b, d1e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d2b, d2e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_bgn(d2b, d2e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d3b, d3e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_end(d3b, d3e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d4b, d4e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_bgn(d4b, d4e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d5b, d5e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_end(d5b, d5e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d6b, d6e, i, timestamp, tick_data["ts"]):
+            if self.__revise_to_bgn(d6b, d6e, i, timestamp, ts_lst):
                 continue
+        tick_data.index = ts_lst
+        truncated_data = tick_data.truncate(before=d0e, after=d6b)
+        return truncated_data
+
+    def __revise_cfx_equity(self, tick_data: pd.DataFrame) -> pd.DataFrame:
+        # morning section
+        if self.this_trade_date < self.EQT_TRADE_TIME_CHG_DATE:
+            d0b = self.t_date + dt.timedelta(hours=9, minutes=10)
+            d0e = self.t_date + dt.timedelta(hours=9, minutes=15)
+        else:
+            d0b = self.t_date + dt.timedelta(hours=9, minutes=25)
+            d0e = self.t_date + dt.timedelta(hours=9, minutes=30)
+
+        d1b = self.t_date + dt.timedelta(hours=11, minutes=30)
+        d1e = self.t_date + dt.timedelta(hours=11, minutes=31)
+
+        # afternoon section
+        d2b = self.t_date + dt.timedelta(hours=12, minutes=59)
+        d2e = self.t_date + dt.timedelta(hours=13, minutes=0)
+        if self.this_trade_date < self.EQT_TRADE_TIME_CHG_DATE:
+            d3b = self.t_date + dt.timedelta(hours=15, minutes=15)
+            d3e = self.t_date + dt.timedelta(hours=15, minutes=20)
+        else:
+            d3b = self.t_date + dt.timedelta(hours=15, minutes=0)
+            d3e = self.t_date + dt.timedelta(hours=15, minutes=5)
+
+        ts_lst = tick_data.index.tolist()
+        for i, timestamp in enumerate(ts_lst):
+            if self.__revise_to_end(d0b, d0e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_bgn(d1b, d1e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_end(d2b, d2e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_bgn(d3b, d3e, i, timestamp, ts_lst):
+                continue
+        tick_data.index = ts_lst
+        truncated_data = tick_data.truncate(before=d0e, after=d3b)
+        return truncated_data
+
+    def __revise_cfx_treasury_bond(self, tick_data: pd.DataFrame) -> pd.DataFrame:
+        # morning section
+        d0b = self.t_date + dt.timedelta(hours=9, minutes=10)
+        d0e = self.t_date + dt.timedelta(hours=9, minutes=15)
+        d1b = self.t_date + dt.timedelta(hours=11, minutes=30)
+        d1e = self.t_date + dt.timedelta(hours=11, minutes=31)
+
+        # afternoon section
+        d2b = self.t_date + dt.timedelta(hours=12, minutes=59)
+        d2e = self.t_date + dt.timedelta(hours=13, minutes=0)
+        d3b = self.t_date + dt.timedelta(hours=15, minutes=15)
+        d3e = self.t_date + dt.timedelta(hours=15, minutes=20)
+
+        ts_lst = tick_data.index.tolist()
+        for i, timestamp in enumerate(ts_lst):
+            if self.__revise_to_end(d0b, d0e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_bgn(d1b, d1e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_end(d2b, d2e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_bgn(d3b, d3e, i, timestamp, ts_lst):
+                continue
+        tick_data.index = ts_lst
+        truncated_data = tick_data.truncate(before=d0e, after=d3b)
+        return truncated_data
+
+    def revise_ticks(self, tick_data: pd.DataFrame) -> pd.DataFrame:
+        if self.exchange == "CFX":
+            if self.instru.upper() in ["IH.CFX", "IF.CFX", "IC.CFX", "IM.CFX"]:
+                return self.__revise_cfx_equity(tick_data)
+            elif self.instru.upper() in ["TS.CFX", "TF.CFX", "T.CFX", "TL.CFX"]:
+                return self.__revise_cfx_treasury_bond(tick_data)
+            else:
+                raise ValueError(f"instru = {SFR(self.instru)} is illegal for CFX")
+        else:
+            return self.__revise_non_cfx(tick_data)
 
     @staticmethod
     def agg_tick_data_to_bar(tick_data: pd.DataFrame) -> pd.DataFrame:
-        tick_data["Volume"] = tick_data["Volume"].diff().fillna(0)
-        tick_data["Turnover"] = tick_data["Turnover"].diff().fillna(0)
-        ohlc_data = tick_data["LastPrice"].resample("T").ohlc()
-        vol_data = tick_data[["Volume", "Turnover", "OpenInterest"]].resample("T").aggregate({
-            "Volume": sum,
-            "Turnover": sum,
+        ohlc_data = tick_data["LastPrice"].resample("1min").ohlc()
+        vol_data = tick_data[["Volume", "Turnover", "OpenInterest"]].resample("1min").aggregate({
+            "Volume": "sum",
+            "Turnover": "sum",
             "OpenInterest": "last",
         })
         bar_data = pd.merge(left=ohlc_data, right=vol_data, left_index=True, right_index=True, how="inner")
         return bar_data
+
+    def reformat_bar(self, bar_data: pd.DataFrame) -> pd.DataFrame:
+        rft_data = bar_data.dropna(axis=0, subset=["open", "high", "low", "close", "OpenInterest"])
+        rft_data = rft_data.reset_index().rename(
+            columns={"Volume": "vol", "Turnover": "amount", "OpenInterest": "oi", "index": "timestamp"}
+        )
+        rft_data["ts_code"] = self.contract
+        rft_data["trade_date"] = self.this_trade_date
+        rft_data = rft_data[self.save_vars]
+        return rft_data
+
+    def main(self, tick_data: pd.DataFrame) -> pd.DataFrame:
+        self.add_trade_date(tick_data)
+        self.add_ticks(tick_data)
+        truncated_data = self.revise_ticks(tick_data)
+        bar_data = self.agg_tick_data_to_bar(truncated_data)
+        rft_data = self.reformat_bar(bar_data)
+        return rft_data
