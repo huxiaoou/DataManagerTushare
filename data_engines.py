@@ -1,19 +1,21 @@
 import os
 import sys
 import re
+import zipfile
 import time
 import datetime as dt
 import tushare as ts
 import pandas as pd
-import zipfile
+import multiprocessing as mp
 from loguru import logger
 from dataclasses import dataclass
 from rich.progress import Progress, TaskID
 from WindPy import w as wapi
-from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR
+from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR, error_handler
 from husfort.qcalendar import CCalendar
 
 pd.set_option('display.unicode.east_asian_width', True)
+logger.add("logs/download_and_update.log")
 
 
 @dataclass(frozen=True)
@@ -198,7 +200,8 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
                 tick_data = pd.read_csv(sf)
                 return tick_data
             else:
-                raise ValueError(f"{SFR(target_file)} is not found.")
+                logger.info(f"{SFR(target_file)} is not found.")
+                return pd.DataFrame()
 
     @staticmethod
     def cal_vol_and_to(tick_data: pd.DataFrame) -> None:
@@ -208,6 +211,8 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
     def generate_minute_bar(self, instru: str, contract: str, trade_date: str) -> pd.DataFrame:
         contract_ctp, exchange = self.reformat_contract(contract)
         tick_data = self.load_contract_file_from_zipfile(contract_ctp, trade_date)
+        if tick_data.empty:
+            return pd.DataFrame()
         self.cal_vol_and_to(tick_data)
         tick_parser = CTickDataParser(
             trade_date, contract=contract, instru=instru, exchange=exchange,
@@ -227,13 +232,20 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
         for instru, contracts in top_cntrcts_for_instru.items():
             for contract in contracts:
                 iter_args.append((instru, contract))
-        pb.update(task_id, total=len(iter_args), description=f"Processing data for {SFG(trade_date)}", completed=0)
-        dfs: list[pd.DataFrame] = []
-        for instru, contract in iter_args:
-            pb.update(task_id, description=f"Processing data for {SFG(trade_date)}/{SFG(instru)}")
-            df = self.generate_minute_bar(instru=instru, contract=contract, trade_date=trade_date)
-            dfs.append(df)
-            pb.update(task_id, advance=1)
+        pb.update(task_id, total=len(iter_args), description=f"Processing contracts of {SFG(trade_date)}", completed=0)
+        with mp.get_context("spawn").Pool() as pool:
+            jobs = []
+            for instru, contract in iter_args:
+                job = pool.apply_async(
+                    self.generate_minute_bar,
+                    args=(instru, contract, trade_date),
+                    callback=lambda _: pb.update(task_id, advance=1),
+                    error_callback=error_handler,
+                )
+                jobs.append(job)
+            pool.close()
+            pool.join()
+        dfs: list[pd.DataFrame] = [job.get() for job in jobs]
         minute_bar_data = pd.concat(dfs, axis=0, ignore_index=True)
         return minute_bar_data
 
