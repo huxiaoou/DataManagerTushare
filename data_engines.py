@@ -417,48 +417,55 @@ class CTickDataParser:
 
     def __revise_non_cfx(self, tick_data: pd.DataFrame) -> pd.DataFrame:
         # night
-        d0b = self.p_date + dt.timedelta(hours=20, minutes=55)
+        d0b = self.p_date + dt.timedelta(hours=20, minutes=59)
         d0e = self.p_date + dt.timedelta(hours=21, minutes=0)
 
-        # morning
-        d1b = self.t_date + dt.timedelta(hours=8, minutes=55)
-        d1e = self.t_date + dt.timedelta(hours=9, minutes=0)
+        d1b = self.l_date + dt.timedelta(hours=2, minutes=30)
+        d1e = self.l_date + dt.timedelta(hours=2, minutes=35)
 
-        d2b = self.t_date + dt.timedelta(hours=10, minutes=15)
-        d2e = self.t_date + dt.timedelta(hours=10, minutes=16)
+        # morning
+        d2b = self.t_date + dt.timedelta(hours=8, minutes=59)
+        d2e = self.t_date + dt.timedelta(hours=9, minutes=0)
+
+        d3b = self.t_date + dt.timedelta(hours=10, minutes=15)
+        d3e = self.t_date + dt.timedelta(hours=10, minutes=16)
 
         # middle
-        d3b = self.t_date + dt.timedelta(hours=10, minutes=29)
-        d3e = self.t_date + dt.timedelta(hours=10, minutes=30)
+        d4b = self.t_date + dt.timedelta(hours=10, minutes=29)
+        d4e = self.t_date + dt.timedelta(hours=10, minutes=30)
 
-        d4b = self.t_date + dt.timedelta(hours=11, minutes=30)
-        d4e = self.t_date + dt.timedelta(hours=11, minutes=31)
+        d5b = self.t_date + dt.timedelta(hours=11, minutes=30)
+        d5e = self.t_date + dt.timedelta(hours=11, minutes=31)
 
         # afternoon
-        d5b = self.t_date + dt.timedelta(hours=13, minutes=29)
-        d5e = self.t_date + dt.timedelta(hours=13, minutes=30)
+        d6b = self.t_date + dt.timedelta(hours=13, minutes=29)
+        d6e = self.t_date + dt.timedelta(hours=13, minutes=30)
 
-        d6b = self.t_date + dt.timedelta(hours=15, minutes=0)
-        d6e = self.t_date + dt.timedelta(hours=15, minutes=5)
+        d7b = self.t_date + dt.timedelta(hours=15, minutes=0)
+        d7e = self.t_date + dt.timedelta(hours=15, minutes=5)
 
         ts_lst = tick_data.index.tolist()
         for i, timestamp in enumerate(ts_lst):
             if self.__revise_to_end(d0b, d0e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d1b, d1e, i, timestamp, ts_lst):
+            if self.__revise_to_bgn(d1b, d1e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d2b, d2e, i, timestamp, ts_lst):
+            if self.__revise_to_end(d2b, d2e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d3b, d3e, i, timestamp, ts_lst):
+            if self.__revise_to_bgn(d3b, d3e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d4b, d4e, i, timestamp, ts_lst):
+            if self.__revise_to_end(d4b, d4e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_end(d5b, d5e, i, timestamp, ts_lst):
+            if self.__revise_to_bgn(d5b, d5e, i, timestamp, ts_lst):
                 continue
-            if self.__revise_to_bgn(d6b, d6e, i, timestamp, ts_lst):
+            if self.__revise_to_end(d6b, d6e, i, timestamp, ts_lst):
+                continue
+            if self.__revise_to_bgn(d7b, d7e, i, timestamp, ts_lst):
                 continue
         tick_data.index = ts_lst
-        truncated_data = tick_data.truncate(before=d0e, after=d6b)
+        truncated_data = tick_data.query(
+            f"(index >= '{d0e}' & index < '{d1b}')  | (index >= '{d2e}' & index < '{d7b}')"
+        )
         return truncated_data
 
     def __revise_cfx_equity(self, tick_data: pd.DataFrame) -> pd.DataFrame:
@@ -494,7 +501,7 @@ class CTickDataParser:
             if self.__revise_to_bgn(d3b, d3e, i, timestamp, ts_lst):
                 continue
         tick_data.index = ts_lst
-        truncated_data = tick_data.truncate(before=d0e, after=d3b)
+        truncated_data = tick_data.query(f"index >= '{d0e}' & index < '{d3b}'")
         return truncated_data
 
     def __revise_cfx_treasury_bond(self, tick_data: pd.DataFrame) -> pd.DataFrame:
@@ -521,7 +528,7 @@ class CTickDataParser:
             if self.__revise_to_bgn(d3b, d3e, i, timestamp, ts_lst):
                 continue
         tick_data.index = ts_lst
-        truncated_data = tick_data.truncate(before=d0e, after=d3b)
+        truncated_data = tick_data.query(f"index >= '{d0e}' & index < '{d3b}'")
         return truncated_data
 
     def revise_ticks(self, tick_data: pd.DataFrame) -> pd.DataFrame:
