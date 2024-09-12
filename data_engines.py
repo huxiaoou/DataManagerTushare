@@ -177,6 +177,8 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
     def find_top_cntrcts(self, md_cntrcts: pd.DataFrame) -> dict[str, list[str]]:
         top_cntrcts_for_instru: dict[str, list[str]] = {}  # type:ignore
         for instru, instru_data in md_cntrcts.groupby(by="instrument"):
+            if instru.startswith("SCTAS"):  # type:ignore
+                continue
             top_cntrcts_for_instru[instru] = instru_data.head(self.top)["contract"].tolist()  # type:ignore
         return top_cntrcts_for_instru
 
