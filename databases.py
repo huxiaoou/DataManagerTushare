@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from rich.progress import track
 from husfort.qutility import qtimer, SFY, SFG
-from husfort.qinstruments import CInstrumentInfoTable
+from husfort.qinstruments import parse_instrument_from_contract
 from husfort.qcalendar import CCalendar
 from husfort.qsqlite import CDbStruct, CMgrSqlDb
 from data_engines import CSaveDataInfo
@@ -69,7 +69,7 @@ class CDbWriterFmd(__CDbWriter):
     def reformat(self, raw_data: pd.DataFrame, trade_date: str) -> pd.DataFrame:
         cntrcts_data = self.load_cntrcts(trade_date)
         raw_data = pd.merge(left=cntrcts_data, right=raw_data, left_on="contract", right_on="ts_code", how="left")
-        raw_data["instrument"] = raw_data["ts_code"].map(CInstrumentInfoTable.parse_instrument_from_contract)
+        raw_data["instrument"] = raw_data["ts_code"].map(parse_instrument_from_contract)
         rft_data = raw_data[self.db_struct.table.vars.names]
         return rft_data
 
@@ -120,7 +120,7 @@ class CDbWriterPos(__CDbWriter):
         raw_data["symbol"] = raw_data["symbol"].map(self.rft_symbol)
         raw_data["exchange"] = raw_data["exchange"].map(self.rft_exchange)
         raw_data["ts_code"] = raw_data[["symbol", "exchange"]].apply(lambda z: f"{z['symbol']}.{z['exchange']}", axis=1)
-        raw_data["instrument"] = raw_data["ts_code"].map(CInstrumentInfoTable.parse_instrument_from_contract)
+        raw_data["instrument"] = raw_data["ts_code"].map(parse_instrument_from_contract)
         raw_data["code_type"] = raw_data["ts_code"].map(lambda _: self.parse_code_type(_, trade_date))
         rft_data = raw_data[self.db_struct.table.vars.names]
         return rft_data
