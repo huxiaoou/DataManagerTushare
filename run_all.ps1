@@ -1,5 +1,5 @@
-$bgn_date = "20250103"
-$stp_date = "20250201"
+$bgn_date = "20250206"
+$stp_date = "20250217"
 
 python main.py --bgn $bgn_date --stp $stp_date download --switch fmd
 python main.py --bgn $bgn_date --stp $stp_date download --switch contract
@@ -13,4 +13,4 @@ python main.py --bgn $bgn_date --stp $stp_date update --switch position
 python main.py --bgn $bgn_date --stp $stp_date update --switch basis
 python main.py --bgn $bgn_date --stp $stp_date update --switch stock
 
-python main.py --bgn $bgn_date --stp $stp_date download --switch minute # update from juejin by month
+#python main.py --bgn $bgn_date --stp $stp_date download --switch minute # update from juejin by month

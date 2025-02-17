@@ -12,4 +12,4 @@ python main.py --bgn $bgn_date update --switch position
 python main.py --bgn $bgn_date update --switch basis
 python main.py --bgn $bgn_date update --switch stock
 
-python main.py --bgn $bgn_date download --switch minute # update from juejin by month
+#python main.py --bgn $bgn_date download --switch minute # update from juejin by month
