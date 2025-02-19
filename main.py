@@ -32,6 +32,7 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    import sys
     from project_cfg import pro_cfg
     from husfort.qlog import define_logger
     from husfort.qcalendar import CCalendar
@@ -40,7 +41,11 @@ if __name__ == "__main__":
     calendar = CCalendar(calendar_path=pro_cfg.calendar_path)
 
     args = parse_args()
-    bgn, stp = args.bgn, args.stp or calendar.get_next_date(args.bgn, shift=1)
+    try:
+        bgn, stp = args.bgn, args.stp or calendar.get_next_date(args.bgn, shift=1)
+    except ValueError:
+        print(f"Invalid bgn = {args.bgn} or stp = {args.stp}, func = {args.func}, switch = {args.switch}")
+        sys.exit(1)
 
     if args.func == "download":
         if args.switch == "fmd":
