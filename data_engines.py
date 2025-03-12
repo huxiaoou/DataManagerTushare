@@ -56,6 +56,7 @@ class __CDataEngine:
 
 class __CDataEngineTushare(__CDataEngine):
     def __init__(self, save_root_dir: str, save_file_format: str, data_desc: str):
+        # ts.set_token("<KEY>")
         self.api = ts.pro_api()
         super().__init__(save_root_dir, save_file_format, data_desc)
 
