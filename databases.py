@@ -86,9 +86,11 @@ class CDbWriterPos(__CDbWriter):
 
     @staticmethod
     def rft_symbol(symbol: str) -> str:
-        x = re.sub(pattern=r"[^a-zA-Z0-9\.]", repl="", string=symbol)
+        x = re.sub(pattern=r"[^a-zA-Z0-9\.]", repl="", string=symbol)  # 仅保留a-z,A-Z,0-9 以及 . 即移除中文字符
         if x == "PTA":
             return "TA"
+        elif x.startswith("si"):
+            return x.upper()
         else:
             return x
 
