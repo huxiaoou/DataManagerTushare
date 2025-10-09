@@ -76,9 +76,14 @@ class CDbWriterFmd(__CDbWriter):
 
 class CDbWriterPos(__CDbWriter):
     @staticmethod
-    def drop_rows(raw_data: pd.DataFrame) -> pd.DataFrame:
+    def drop_symbols(raw_data: pd.DataFrame) -> pd.DataFrame:
         filter_rows = raw_data["symbol"].map(lambda _: not _.endswith("ACTV"))
         return raw_data[filter_rows].copy()
+
+    @staticmethod
+    def drop_nan_rows(raw_data: pd.DataFrame) -> pd.DataFrame:
+        check_cols = ["broker", "vol", "vol_chg", "long_hld", "long_chg", "short_hld", "short_chg"]
+        return raw_data.dropna(axis=0, subset=check_cols, how="all")
 
     @staticmethod
     def rft_broker(broker: str) -> str:
@@ -117,7 +122,8 @@ class CDbWriterPos(__CDbWriter):
             raise ValueError(f"Pattern can not be parsed for code = {SFY(code)} @ {SFY(trade_date)}")
 
     def reformat(self, raw_data: pd.DataFrame, trade_date: str) -> pd.DataFrame:
-        raw_data = self.drop_rows(raw_data)
+        raw_data = self.drop_symbols(raw_data)
+        raw_data = self.drop_nan_rows(raw_data)
         raw_data["broker"] = raw_data["broker"].map(self.rft_broker)
         raw_data["symbol"] = raw_data["symbol"].map(self.rft_symbol)
         raw_data["exchange"] = raw_data["exchange"].map(self.rft_exchange)
