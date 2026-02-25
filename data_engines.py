@@ -11,7 +11,7 @@ from loguru import logger
 from dataclasses import dataclass
 from rich.progress import Progress, TaskID
 from WindPy import w as wapi
-from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR, error_handler
+from husfort.qutility import check_and_makedirs, qtimer, SFG, SFR, SFY, error_handler
 from husfort.qcalendar import CCalendar
 
 pd.set_option('display.unicode.east_asian_width', True)
@@ -200,7 +200,11 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
             target_file = f"{trade_date[0:6]}/{trade_date}/{new_contract}_{trade_date}.csv"
             if target_file in files:
                 sf = zf.open(target_file)
-                tick_data = pd.read_csv(sf)
+                try:
+                    tick_data = pd.read_csv(sf)
+                except pd.errors.EmptyDataError:
+                    logger.info(f"File {SFY(target_file)} has no data")
+                    tick_data = pd.DataFrame()
                 return tick_data
             else:
                 logger.info(f"{SFR(target_file)} is not found.")
@@ -249,6 +253,11 @@ class CDataEngineTushareFutDailyMinuteBar(__CDataEngine):
             pool.close()
             pool.join()
         dfs: list[pd.DataFrame] = [job.get() for job in jobs]
+
+        # dfs: list[pd.DataFrame] = []
+        # for instru, contract in iter_args:
+        #     dfs.append(self.generate_minute_bar(instru, contract, trade_date))
+
         minute_bar_data = pd.concat(dfs, axis=0, ignore_index=True)
         return minute_bar_data
 
