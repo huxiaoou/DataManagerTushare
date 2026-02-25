@@ -94,7 +94,7 @@ class CDbWriterPos(__CDbWriter):
         x = re.sub(pattern=r"[^a-zA-Z0-9\.]", repl="", string=symbol)  # 仅保留a-z,A-Z,0-9 以及 . 即移除中文字符
         if x == "PTA":
             return "TA"
-        elif x.startswith("si"):
+        elif x.startswith("si") or x.startswith("lc") or x.startswith("ps"):
             return x.upper()
         else:
             return x
