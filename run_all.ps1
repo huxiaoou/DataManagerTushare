@@ -1,5 +1,5 @@
-$bgn_date = "20251101"
-$stp_date = "20260201"
+$bgn_date = "20260202"
+$stp_date = "20260601"
 
 python main.py --bgn $bgn_date --stp $stp_date download --switch fmd
 python main.py --bgn $bgn_date --stp $stp_date download --switch contract
